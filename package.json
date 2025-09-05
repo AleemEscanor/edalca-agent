@@ -11,6 +11,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "@aws-sdk/client-bedrock-agentcore-control": "^3.882.0",
         "@langchain/core": "^0.3.72",
         "@langchain/langgraph": "^0.4.7",
         "@langchain/openai": "^0.6.9",
