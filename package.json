@@ -1,0 +1,30 @@
+{
+    "name": "langchain-agent",
+    "version": "1.0.0",
+    "description": "A LangGraph agent with custom tools.",
+    "scripts": {
+        "start": "ts-node-dev --respawn --transpile-only local_runner.ts",
+        "build": "tsc",
+        "serve": "node dist/server.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@langchain/core": "^0.3.72",
+        "@langchain/langgraph": "^0.4.7",
+        "@langchain/openai": "^0.6.9",
+        "cors": "^2.8.5",
+        "dotenv": "^17.2.1",
+        "express": "^4.19.2",
+        "mongoose": "^8.18.0",
+        "typescript": "^5.8.3",
+        "zod": "3.23.8"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.19",
+        "@types/express": "^4.17.21",
+        "@types/node": "^24.0.3",
+        "ts-node-dev": "^2.0.0"
+    }
+}
