@@ -7,6 +7,7 @@ import { StateGraph } from "@langchain/langgraph";
 import { Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { fetchWorkOrderTool } from "./tools/fetchWorkOrderTool";
+import { BedrockAgentCoreClient, CreateEventCommand, PayloadType } from "@aws-sdk/client-bedrock-agentcore";
 
 // ---------------------------
 // Define Agent State
@@ -65,7 +66,23 @@ async function shouldContinue(state: typeof GraphState.State) {
 // ---------------------------
 // Final Agent Entry Point (used by AWS AgentCore)
 // ---------------------------
-export async function callAgent(userQuery: string, thread_id: string) {
+export async function callAgent(
+  userQuery: string,
+  thread_id: string,
+  {
+    memoryClient,
+    memory_id,
+    actor_id,
+    session_id,
+  }: {
+    memoryClient: BedrockAgentCoreClient;
+    memory_id: string;
+    actor_id: string;
+    session_id: string;
+  }
+) {
+  const initialMessage = new HumanMessage(userQuery);
+
   const workflow = new StateGraph(GraphState)
     .addNode("agent", callModel)
     .addNode("tools", toolNode)
@@ -73,15 +90,47 @@ export async function callAgent(userQuery: string, thread_id: string) {
     .addConditionalEdges("agent", shouldContinue)
     .addEdge("tools", "agent");
 
-  const app = workflow.compile(); // ✅ No MongoDBSaver
+  const app = workflow.compile();
 
   const finalState = await app.invoke(
-    { messages: [new HumanMessage(userQuery)] },
+    { messages: [initialMessage] },
     {
       recursionLimit: 15,
-      configurable: { thread_id }, // ✅ Passed from AWS AgentCore
+      configurable: { thread_id },
     }
   );
 
-  return finalState.messages[finalState.messages.length - 1].content;
+  const allMessages = finalState.messages;
+
+  // 1. Transform all messages into conversational payload format
+  const payload: PayloadType[] = allMessages.map((msg) => {
+    let role: "USER" | "ASSISTANT" | "TOOL" | "OTHER" = "OTHER";
+
+    if (msg.getType() === "human") role = "USER";
+    else if (msg.getType() === "ai") role = "ASSISTANT";
+    else if (msg.getType() === "tool") role = "TOOL";
+
+    return {
+      conversational: {
+        content: { text: msg.content },
+        role,
+      },
+    } as PayloadType;
+  });
+
+  // 2. Send single memory event
+  const command: any = new CreateEventCommand({
+    memoryId: memory_id,
+    actorId: actor_id,
+    sessionId: session_id,
+    eventTimestamp: new Date(),
+    payload,
+    clientToken: crypto.randomUUID(),
+  })
+    
+  await memoryClient.send(command);
+
+  // 3. Return final assistant message
+  return allMessages[allMessages.length - 1].content;
 }
+
