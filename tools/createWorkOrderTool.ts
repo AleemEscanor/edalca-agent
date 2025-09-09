@@ -88,8 +88,9 @@ export const createWorkOrderTool = tool(
     console.log(draftFields, "draftFields");
     // 3️⃣ Validate procedure
     if (draftFields.procedure && !draftFields.procedureId) {
+      // Procedure validation (case-insensitive)
       const proc = await Procedure.findOne({
-        name: draftFields.procedure,
+        name: { $regex: `^${draftFields.procedure}$`, $options: "i" },
         organizationId,
       });
       if (!proc) {
@@ -109,8 +110,9 @@ export const createWorkOrderTool = tool(
 
     // 4️⃣ Validate location
     if (draftFields.location && !draftFields.locationId) {
+      // Location validation (case-insensitive)
       const loc: any = await Location.findOne({
-        name: draftFields.location,
+        name: { $regex: `^${draftFields.location}$`, $options: "i" },
         organizationId,
       });
       if (!loc) {
@@ -130,6 +132,7 @@ export const createWorkOrderTool = tool(
     }
 
     // 5️⃣ Validate assigned users
+    // Assigned users validation (case-insensitive, supports first-name-only)
     if (draftFields.assignToUser && !draftFields.assignedTo) {
       const names = Array.isArray(draftFields.assignToUser)
         ? draftFields.assignToUser
@@ -138,13 +141,24 @@ export const createWorkOrderTool = tool(
       const queries = names.map((fullName: any) => {
         const [firstName, ...lastNameParts] = fullName.split(" ");
         const lastName = lastNameParts.join(" ");
-        return { firstName, lastName };
+
+        if (lastName) {
+          // First + Last name provided → match both
+          return {
+            firstName: { $regex: `^${firstName}$`, $options: "i" },
+            lastName: { $regex: `^${lastName}$`, $options: "i" },
+          };
+        } else {
+          // Only first name provided → match only first name
+          return {
+            firstName: { $regex: `^${firstName}$`, $options: "i" },
+          };
+        }
       });
 
       const assignUsers: any[] = await User.find({
         $or: queries.map((q: any) => ({
-          firstName: q.firstName,
-          lastName: q.lastName,
+          ...q,
           organizationId,
         })),
       });
@@ -163,7 +177,7 @@ export const createWorkOrderTool = tool(
 
       draftFields.assignedTo = assignUsers.map((u) => ({
         id: u._id,
-        name: u.name,
+        name: `${u.firstName} ${u.lastName}.trim()`,
         type: "user",
       }));
     }
