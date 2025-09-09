@@ -37,7 +37,7 @@ app.post("/invocations", async (req: Request, res: Response) => {
     await initializeMongoConnection();
     console.log("req.body", req.body);
 
-    const { prompt: userQuery, sessionId, userId } = req.body;
+    const { prompt: userQuery, sessionId, userId, organizationId } = req.body;
     console.log(
       "  - Query:" +
         `${userQuery.substring(0, 100)}${userQuery.length > 100 ? "..." : ""}`
@@ -61,8 +61,9 @@ app.post("/invocations", async (req: Request, res: Response) => {
       memoryClient: memoryClient,
       memory_id: memoryId,
       actor_id: userId,
-      session_id: sessionId
-    }
+      session_id: sessionId,
+      organizationId: organizationId,
+    };
 
     const agentResponse = await callAgent(userQuery, threadId, memoryConfig);
 

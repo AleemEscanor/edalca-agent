@@ -17,6 +17,7 @@ export function sanitizeMemoryName(chatId: string): string {
 export async function getOrCreateMemory(client: any, chatId: string) {
   // Check if memory already exists for this user
   let memory = await AgentMemory.findOne({ chatId: chatId });
+  console.log(memory, "memory");
 
   if (!memory) {
     // Create a new memory in Bedrock

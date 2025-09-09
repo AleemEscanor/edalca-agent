@@ -16,6 +16,7 @@ import {
   PayloadType,
 } from "@aws-sdk/client-bedrock-agentcore";
 import { ListEventsCommand } from "@aws-sdk/client-bedrock-agentcore";
+import { createWorkOrderTool } from "./tools/createWorkOrderTool";
 
 function convertEventToMessage(event: any): BaseMessage | null {
   if (!event?.payload || event?.payload?.length === 0) {
@@ -72,12 +73,12 @@ const GraphState = Annotation.Root({
 // ---------------------------
 // Tools
 // ---------------------------
-const tools = [fetchWorkOrderTool];
+const tools = [fetchWorkOrderTool, createWorkOrderTool];
 const toolNode = new ToolNode<typeof GraphState.State>(tools);
 
 // ---------------------------
 // Chat Model
-// ---------------------------
+// ---------------------------y
 const chatModel = new ChatOpenAI({
   model: "gpt-4o-mini-2024-07-18",
   temperature: 0,
@@ -90,7 +91,14 @@ async function callModel(state: typeof GraphState.State) {
   const prompt = ChatPromptTemplate.fromMessages([
     [
       "system",
-      `You are a helpful agent with tools: {tool_names}. Use tools if needed.`,
+      `You are a helpful agent with tools: {tool_names}.
+      
+      - Use "fetch_workOrder_tool" when the user wants to search or filter work orders.  
+      - Use "create_workOrder_tool" when the user wants to create a new work order.  
+
+      For create_workOrder_tool: Extract values into its schema fields:  
+      name, description, procedure, location, timeInHours, startDate, dueDate, assignToUser, uploadImage.  
+      If user input is incomplete, call the tool with what you have so it can guide the user for missing fields.`,
     ],
     new MessagesPlaceholder("messages"),
   ]);
@@ -125,11 +133,13 @@ export async function callAgent(
     memory_id,
     actor_id,
     session_id,
+    organizationId,
   }: {
     memoryClient: BedrockAgentCoreClient;
     memory_id: string;
     actor_id: string;
     session_id: string;
+    organizationId: string;
   }
 ) {
   const pastMessages = await fetchConversationHistory(
@@ -151,14 +161,15 @@ export async function callAgent(
     .addEdge("tools", "agent");
 
   const app = workflow.compile();
-
-  const finalState = await app.invoke(
-    { messages: [...pastMessages, initialMessage] },
-    {
-      recursionLimit: 15,
-      configurable: { thread_id },
-    }
-  );
+  const initialState = { messages: [...pastMessages, initialMessage] };
+  const finalState = await app.invoke(initialState, {
+    recursionLimit: 15,
+    configurable: {
+      thread_id,
+      user: { userId: actor_id, organizationId },
+      state: initialState,
+    },
+  });
 
   const allMessages = finalState.messages;
 
