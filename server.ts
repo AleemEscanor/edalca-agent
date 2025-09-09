@@ -15,11 +15,19 @@ app.use(express.json());
 app.use(cors());
 
 const client = new BedrockAgentCoreControlClient({
-  region: "eu-central-1",
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
 });
 
 const memoryClient = new BedrockAgentCoreClient({
-  region: "eu-central-1",
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
 });
 
 // Handle invocation requests from the Bedrock AgentCore Runtime
@@ -41,7 +49,7 @@ app.post("/invocations", async (req: Request, res: Response) => {
         .json({ error: "Missing or invalid 'prompt' in request payload." });
     }
 
-    const threadId = sessionId || `session-${Date.now()}`;
+    const threadId = `session-${Date.now()}`;
 
     console.log("🔍 Processing request:");
     console.log("  - Thread ID:" + `${threadId}`);
