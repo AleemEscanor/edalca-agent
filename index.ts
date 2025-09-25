@@ -17,6 +17,7 @@ import {
 } from "@aws-sdk/client-bedrock-agentcore";
 import { ListEventsCommand } from "@aws-sdk/client-bedrock-agentcore";
 import { createWorkOrderTool } from "./tools/createWorkOrderTool";
+import { cleanPastMessagesAfterReset } from "./utils";
 
 function convertEventToMessage(event: any): BaseMessage | null {
   if (!event?.payload || event?.payload?.length === 0) {
@@ -91,8 +92,8 @@ async function callModel(state: typeof GraphState.State) {
   const prompt = ChatPromptTemplate.fromMessages([
     [
       "system",
-      `You are a helpful agent with tools: {tool_names}.
-      
+      `You are a helpful agent named Edalca Ai and you have capabilities with tools: {tool_names}.
+
       - Use "fetch_workOrder_tool" when the user wants to search or filter work orders.  
       - Use "create_workOrder_tool" when the user wants to create a new work order.  
 
@@ -149,7 +150,7 @@ export async function callAgent(
     actor_id
   );
 
-  console.log(pastMessages, "pastMessages");
+  // console.log(pastMessages, "pastMessages");
 
   const initialMessage = new HumanMessage(userQuery);
 
@@ -161,7 +162,10 @@ export async function callAgent(
     .addEdge("tools", "agent");
 
   const app = workflow.compile();
-  const initialState = { messages: [...pastMessages, initialMessage] };
+
+  const cleanedMessages = cleanPastMessagesAfterReset(pastMessages);
+  const initialState = { messages: [...cleanedMessages, initialMessage] };
+
   const finalState = await app.invoke(initialState, {
     recursionLimit: 15,
     configurable: {
@@ -193,6 +197,7 @@ export async function callAgent(
     } else if (msg.content?.text) {
       textContent = msg.content.text;
     }
+console.log('-------textContent--------', textContent);
 
     return {
       conversational: { content: { text: textContent }, role: "USER" },
@@ -210,7 +215,7 @@ export async function callAgent(
   });
 
   const res = await memoryClient.send(command);
-  console.log(res);
+  console.log('-Insert in memory Response: ', res);
 
   // 3. Return final assistant message
   return allMessages[allMessages.length - 1].content;

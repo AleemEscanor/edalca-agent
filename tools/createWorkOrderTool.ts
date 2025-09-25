@@ -49,6 +49,8 @@ function parseHumanMessages(messages: any[]) {
 
 export const createWorkOrderTool = tool(
   async (input: any, config: any) => {
+      console.log("Tool called- Create work order");
+
     const { userId, organizationId } = config?.configurable.user || {};
     let draftFields: Record<string, any> = {};
     const previousDrafts: Record<string, any> = {};
@@ -61,7 +63,7 @@ export const createWorkOrderTool = tool(
           const content =
             typeof m.content === "string" ? JSON.parse(m.content) : m.content;
           if (content?.draft) {
-            Object.assign(draftFields, content.draft);
+            // Object.assign(draftFields, content.draft);
           }
         } catch {}
       }
@@ -82,7 +84,7 @@ export const createWorkOrderTool = tool(
     console.log(draftFields, input, "input");
     draftFields = {
       ...draftFields,
-      ...parseHumanMessages(config?.configurable?.state?.messages),
+      // ...parseHumanMessages(config?.configurable?.state?.messages),
       ...input,
     };
     console.log(draftFields, "draftFields");
@@ -218,8 +220,9 @@ export const createWorkOrderTool = tool(
     return new ToolMessage({
       content: JSON.stringify({
         success: true,
-        message: `Work order "${newWorkOrder.name}" created successfully!`,
-        draft: draftFields,
+        message: `Work order "${newWorkOrder.name}" created successfully! And draft cleared.`,
+        draft: {},
+        reset: true,
         id: newWorkOrder._id,
       }),
       name: "createWorkOrder",
@@ -228,7 +231,7 @@ export const createWorkOrderTool = tool(
   },
   {
     name: "createWorkOrder",
-    description: "Create a new work order step by step.",
+    description: "Use this tool to  a new work order step by step. Make sure you never use previous drafts which were used to create work order !",
     schema: z.object({
       name: z.string().optional(),
       description: z.string().optional(),

@@ -35,13 +35,9 @@ app.post("/invocations", async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
     await initializeMongoConnection();
-    console.log("req.body", req.body);
+    console.log("-Request Body", req.body);
 
     const { prompt: userQuery, sessionId, userId, organizationId } = req.body;
-    console.log(
-      "  - Query:" +
-        `${userQuery.substring(0, 100)}${userQuery.length > 100 ? "..." : ""}`
-    );
 
     if (!userQuery || typeof userQuery !== "string") {
       return res
@@ -51,11 +47,10 @@ app.post("/invocations", async (req: Request, res: Response) => {
 
     const threadId = `session-${Date.now()}`;
 
-    console.log("🔍 Processing request:");
-    console.log("  - Thread ID:" + `${threadId}`);
+    console.log("- Thread ID:" + `${threadId}`);
 
     const memoryId = await getOrCreateMemory(client, sessionId);
-    console.log(memoryId, "memoryId");
+    console.log("-MemoryId: ", memoryId);
 
     const memoryConfig = {
       memoryClient: memoryClient,
@@ -91,7 +86,7 @@ app.post("/invocations", async (req: Request, res: Response) => {
 });
 // Health check endpoint with more details
 app.get("/ping", (req: Request, res: Response) => {
-  console.log("🏓 Health check requested");
+  // console.log("🏓 Health check requested");
   res.status(200).json({
     status: "OK",
     timestamp: new Date().toISOString(),
