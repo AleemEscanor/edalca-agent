@@ -18,6 +18,7 @@ import {
 import { ListEventsCommand } from "@aws-sdk/client-bedrock-agentcore";
 import { createWorkOrderTool } from "./tools/createWorkOrderTool";
 import { cleanPastMessagesAfterReset } from "./utils";
+import { queryKnowledgeBaseTool } from "./tools/queryKnowledgeBaseTool";
 
 function convertEventToMessage(event: any): BaseMessage | null {
   if (!event?.payload || event?.payload?.length === 0) {
@@ -74,7 +75,7 @@ const GraphState = Annotation.Root({
 // ---------------------------
 // Tools
 // ---------------------------
-const tools = [fetchWorkOrderTool, createWorkOrderTool];
+const tools = [fetchWorkOrderTool, createWorkOrderTool, queryKnowledgeBaseTool];
 const toolNode = new ToolNode<typeof GraphState.State>(tools);
 
 // ---------------------------
@@ -95,7 +96,11 @@ async function callModel(state: typeof GraphState.State) {
       `You are a helpful agent named Edalca Ai and you have capabilities with tools: {tool_names}.
 
       - Use "fetch_workOrder_tool" when the user wants to search or filter work orders.  
-      - Use "create_workOrder_tool" when the user wants to create a new work order.  
+      - Use "create_workOrder_tool" when the user wants to create a new work order. 
+      - Use 'query_documents_kb' whenever:
+        - the user asks a question about documents
+        - the answer is stored in documents in S3
+        - the question is informational and requires referencing the Knowledge Base" 
 
       For create_workOrder_tool: Extract values into its schema fields:  
       name, description, procedure, location, timeInHours, startDate, dueDate, assignToUser, uploadImage.  
