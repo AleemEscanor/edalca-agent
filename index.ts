@@ -14,53 +14,87 @@ import {
   BedrockAgentCoreClient,
   CreateEventCommand,
   PayloadType,
+  RetrieveMemoryRecordsCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
 import { ListEventsCommand } from "@aws-sdk/client-bedrock-agentcore";
 import { createWorkOrderTool } from "./tools/createWorkOrderTool";
-import { cleanPastMessagesAfterReset } from "./utils";
+import { cleanPastMessagesAfterReset, extractSourcesFromMessages } from "./utils";
 import { queryKnowledgeBaseTool } from "./tools/queryKnowledgeBaseTool";
 
-function convertEventToMessage(event: any): BaseMessage | null {
-  if (!event?.payload || event?.payload?.length === 0) {
+function convertEventToMessages(event: any): BaseMessage[] {
+  if (!Array.isArray(event?.payload) || event.payload.length === 0) {
     console.warn("⚠️ Skipping event without payload", event);
-    return null;
+    return [];
   }
 
-  const payloadItem = event.payload[0];
-  const conversational =
-    payloadItem?.Conversational || payloadItem?.conversational;
-  const role = conversational?.Role || conversational?.role;
-  const text =
-    conversational?.Content?.Text || conversational?.content.text || "";
+  return event.payload
+    .map((payloadItem: any) => {      
+      const conversational =
+        payloadItem?.Conversational || payloadItem?.conversational;
 
-  if (!text) {
-    console.warn("⚠️ Skipping empty payload text", event);
-    return null;
-  }
+      const role =
+        conversational?.Role || conversational?.role;
 
-  if (role === "USER") return new HumanMessage(text);
-  if (role === "ASSISTANT") return new AIMessage(text);
-  return new HumanMessage(text); // fallback
+      const text =
+        conversational?.Content?.Text ||
+        conversational?.content?.text ||
+        "";
+
+      if (!text) {
+        console.warn("⚠️ Skipping empty payload item", payloadItem);
+        return null;
+      }
+
+      if (role === "USER") return new HumanMessage(text);
+      if (role === "ASSISTANT") return new AIMessage(text);
+
+      return new HumanMessage(text); // fallback
+    })
+    .filter((msg: any): msg is BaseMessage => msg !== null);
 }
+
 
 async function fetchConversationHistory(
   memoryClient: BedrockAgentCoreClient,
-  memory_id: string,
+  memoryId: string,
   session_id: string,
   actor_id: string
 ): Promise<BaseMessage[]> {
   const command = new ListEventsCommand({
-    memoryId: memory_id,
+    memoryId: memoryId,
     sessionId: session_id,
     actorId: actor_id,
   });
 
   const response = await memoryClient.send(command);
   const events = response?.events || [];
+  return events.flatMap((event: any) =>
+    convertEventToMessages(event)
+  );
+}
 
-  return events
-    .map((event: any) => convertEventToMessage(event))
-    .filter((msg: BaseMessage | null): msg is BaseMessage => msg !== null);
+async function fetchConversationSummary(
+  userQuery: string,
+  memoryClient: BedrockAgentCoreClient,
+  memoryId: string,
+  session_id: string,
+  actor_id: string
+): Promise<BaseMessage[]> {
+  const command = new RetrieveMemoryRecordsCommand({
+    memoryId: memoryId,
+    namespace: `/summaries/${actor_id}/${session_id}`,
+    searchCriteria: {
+        "searchQuery": userQuery,
+        "topK": 5
+    },
+  });
+
+  const response = await memoryClient.send(command);
+  const memoryRecordSummaries = response?.memoryRecordSummaries || [];
+  
+  return memoryRecordSummaries.map((record: any) =>
+    record?.content?.text
+  );
 }
 
 // ---------------------------
@@ -136,26 +170,33 @@ export async function callAgent(
   thread_id: string,
   {
     memoryClient,
-    memory_id,
+    memoryId,     // Bedrock memory for session
     actor_id,
-    session_id,
+    session_id,    // session ID
     organizationId,
   }: {
     memoryClient: BedrockAgentCoreClient;
-    memory_id: string;
+    memoryId: string;
     actor_id: string;
     session_id: string;
     organizationId: string;
   }
 ) {
+  // 1️⃣ Fetch past messages from this session
   const pastMessages = await fetchConversationHistory(
     memoryClient,
-    memory_id,
+    memoryId,
     session_id,
     actor_id
   );
 
-  // console.log(pastMessages, "pastMessages");
+  const pastSummaries = await fetchConversationSummary(
+    userQuery,
+    memoryClient,
+    memoryId,
+    session_id,
+    actor_id
+  );
 
   const initialMessage = new HumanMessage(userQuery);
 
@@ -168,8 +209,9 @@ export async function callAgent(
 
   const app = workflow.compile();
 
+  // Clean messages if previous session reset happened
   const cleanedMessages = cleanPastMessagesAfterReset(pastMessages);
-  const initialState = { messages: [...cleanedMessages, initialMessage] };
+  const initialState = { messages: [...cleanedMessages, initialMessage], summaries: pastSummaries };
 
   const finalState = await app.invoke(initialState, {
     recursionLimit: 15,
@@ -181,37 +223,27 @@ export async function callAgent(
   });
 
   const allMessages = finalState.messages;
-
   const latestTwo = allMessages.slice(-2);
 
+  // 2️⃣ Insert events into Bedrock memory for this session
   const payload: PayloadType[] = latestTwo.map((msg: any) => {
     let role: "USER" | "ASSISTANT" | "TOOL" | "OTHER" = "OTHER";
-
+    
     if (msg.getType() === "human") role = "USER";
     else if (msg.getType() === "ai") role = "ASSISTANT";
     else if (msg.getType() === "tool") role = "TOOL";
 
     let textContent = "";
-    if (typeof msg.content === "string") {
-      textContent = msg.content.trim();
-    } else if (Array.isArray(msg.content)) {
-      textContent = msg.content
-        .map((c: any) => (typeof c === "string" ? c : c?.text || ""))
-        .join(" ")
-        .trim();
-    } else if (msg.content?.text) {
-      textContent = msg.content.text;
-    }
-console.log('-------textContent--------', textContent);
+    if (typeof msg.content === "string") textContent = msg.content.trim();
+    else if (Array.isArray(msg.content)) {
+      textContent = msg.content.map((c: any) => (typeof c === "string" ? c : c?.text || "")).join(" ").trim();
+    } else if (msg.content?.text) textContent = msg.content.text;
 
-    return {
-      conversational: { content: { text: textContent }, role: "USER" },
-    } as unknown as PayloadType;
+    return { conversational: { content: { text: textContent }, role } } as unknown as PayloadType;
   });
 
-  // 2. Send single memory event
   const command: any = new CreateEventCommand({
-    memoryId: memory_id,
+    memoryId: memoryId,
     actorId: actor_id,
     sessionId: session_id,
     eventTimestamp: new Date(),
@@ -220,8 +252,10 @@ console.log('-------textContent--------', textContent);
   });
 
   const res = await memoryClient.send(command);
-  console.log('-Insert in memory Response: ', res);
 
-  // 3. Return final assistant message
-  return allMessages[allMessages.length - 1].content;
+  const finalMessageContent = allMessages[allMessages.length - 1].content;
+  const sources = extractSourcesFromMessages(allMessages);
+
+  return sources ? { message: finalMessageContent, sources } : { message: finalMessageContent };
 }
+
