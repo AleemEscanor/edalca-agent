@@ -5,7 +5,8 @@ import initializeMongoConnection from "./local_runner";
 import cors from "cors";
 import { BedrockAgentCoreControlClient } from "@aws-sdk/client-bedrock-agentcore-control";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
-import { getOrCreateActiveSession } from "./utils";
+import { GenerateTitleForSession } from "./utils";
+import Chat from "./model/chat/ChatModel";
 
 dotenv.config();
 const app = express();
@@ -46,13 +47,19 @@ app.post("/invocations", async (req: Request, res: Response) => {
     }
 
     // ----- SESSION INTEGRATION -----
-    const session = await getOrCreateActiveSession(client, chatId, sessionId, userQuery);
+    const session = await GenerateTitleForSession(client, chatId, sessionId, userQuery);
 
-    console.log(`- Using sessionId: ${session._id}, memoryId: ${session.memoryId}`);
+    const chatDoc = await Chat.findById(chatId);
+    if (!chatDoc) {
+      return res.status(404).json({ error: "Chat not found." });
+    }
+    const memoryId = chatDoc.memoryId;
+
+    console.log(`- Using sessionId: ${session._id}, memoryId: ${memoryId}`);
 
     const agentResponse = await callAgent(userQuery, `thread-${Date.now()}`, {
       memoryClient,
-      memoryId: session.memoryId,
+      memoryId,
       actor_id: userId,
       session_id: sessionId,
       organizationId,

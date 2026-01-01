@@ -44,7 +44,7 @@ export async function getOrCreateMemory(client: any, chatId: string) {
 }
 
 import { BaseMessage } from "@langchain/core/messages";
-import ChatSession from "../model/agent/ChatSessionModel";
+import ChatSession from "../model/chat/ChatSessionModel";
 import { ChatOpenAI } from "@langchain/openai";
 
 /**
@@ -121,7 +121,7 @@ export function extractSourcesFromMessages(messages: any): string[] | null {
   return urls.size ? [...urls] : null;
 }
 
-export async function getOrCreateActiveSession(
+export async function GenerateTitleForSession(
   client: BedrockAgentCoreControlClient,
   chatId: string,
   sessionId: string,
@@ -136,30 +136,6 @@ export async function getOrCreateActiveSession(
     model: "gpt-4o-mini-2024-07-18",
     temperature: 0.2,
   });
-  if (!session?.memoryId) {
-    // Create Bedrock memory
-    const memoryName = `user_${chatId}`;
-    const result: any = await client.send(
-      new CreateMemoryCommand({
-        name: memoryName,
-        description: `Memory for chat session ${chatId}`,
-        eventExpiryDuration: 30, // 30 days
-        memoryStrategies: [
-          {
-            summaryMemoryStrategy: {
-              name: "conversation_summary",
-              namespaces: ["/summaries/{actorId}/{sessionId}"],
-            },
-          },
-        ], // This is short-term memory
-      })
-    );
-
-    const memoryId = result?.memory?.id;
-
-    session.memoryId = memoryId;
-    session.save();
-  }
   if (!session?.title) {
     // generate a short title using the users first message for the session
     if (!session?.title) {

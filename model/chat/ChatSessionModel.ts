@@ -8,7 +8,6 @@ export interface IChatSession extends Document {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  memoryId?: string;           // Bedrock memory id
 }
 
 const ChatSessionSchema = new Schema<IChatSession>(
@@ -20,9 +19,6 @@ const ChatSessionSchema = new Schema<IChatSession>(
             index: true,
         },
         title: {
-            type: String,
-        },
-        memoryId: {
             type: String,
         },
         summary: {
