@@ -61,7 +61,7 @@ app.post("/invocations", async (req: Request, res: Response) => {
       memoryClient,
       memoryId,
       actor_id: userId,
-      session_id: sessionId,
+      session_id: session._id,
       organizationId,
     });
 
@@ -74,7 +74,7 @@ app.post("/invocations", async (req: Request, res: Response) => {
         sources: agentResponse?.sources,
         metadata: {
           responseTime,
-          sessionId: session.sessionId,
+          sessionId: session._id,
           timestamp: new Date().toISOString(),
         },
       },
