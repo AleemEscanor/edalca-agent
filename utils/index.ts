@@ -127,22 +127,19 @@ export async function GenerateTitleForSession(
   sessionId: string,
   userQuery: string
 ) {
-  if (sessionId) {
-    const session = await ChatSession.findOne({
-      chatId,
-      _id: sessionId,
-      isActive: true,
-    });
-
-    return session;
-  } else if (!sessionId) {
-    // generate title
-    const model = new ChatOpenAI({
-      model: "gpt-4o-mini-2024-07-18",
-      temperature: 0.2,
-    });
-
-    const titlePrompt = `
+  let session = await ChatSession.findOne({
+    chatId: chatId,
+    _id: sessionId,
+    isActive: true,
+  });
+  const model = new ChatOpenAI({
+    model: "gpt-4o-mini-2024-07-18",
+    temperature: 0.2,
+  });
+  if (!session?.title) {
+    // generate a short title using the users first message for the session
+    if (!session?.title) {
+      const titlePrompt = `
 Generate a short, clear title 2-3 words (max 7 words) that summarizes this user request.
 Rules:
 - No quotes
@@ -154,19 +151,17 @@ User message:
 "${userQuery}"
 `;
 
-    const titleResponse = await model.invoke(titlePrompt);
+      const titleResponse = await model.invoke(titlePrompt);
 
-    const title =
-      typeof titleResponse.content === "string"
-        ? titleResponse.content.trim()
-        : "New Chat";
+      const title =
+        typeof titleResponse.content === "string"
+          ? titleResponse.content.trim()
+          : "New Chat";
 
-    // save new session with title:
-    const newSession = await ChatSession.create({
-      chatId,
-      title: title,
-    });
-    return newSession;
+      session.title = title;
+      await session.save();
+    }
   }
-}
 
+  return session;
+}
