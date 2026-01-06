@@ -12,9 +12,13 @@ const model = new ChatOpenAI({
 export const fetchWorkOrderTool = tool(
   async (input: any) => {
     try {
-      console.log("Tool called- Fetch work order");
+      const toolStartTime = Date.now();
+      console.log("\n🔧 [FetchWorkOrder Tool] Started");
+      console.log(`⏱️ [FetchWorkOrder Tool] Called with input:`, input);
       
       // Step 1: Ask the model to convert NL to MongoDB filter
+      console.log(`⏱️ [FetchWorkOrder Tool] Converting natural language to MongoDB query...`);
+      const conversionStartTime = Date.now();
       const systemPrompt = `You are a MongoDB query assistant. Your job is to convert natural language instructions into MongoDB query objects for the WorkOrder schema.
 
 Instructions:
@@ -105,11 +109,13 @@ Output:
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ]);
+      console.log(`⏱️ [FetchWorkOrder Tool] NL conversion completed in ${Date.now() - conversionStartTime}ms`);
 
       console.log("-------filetermessage------", filterMessage);
 
       let parsedFilter;
       try {
+        const parseStartTime = Date.now();
         const content = filterMessage.content as string;
         const rawContent = content?.trim() || "";
 
@@ -122,6 +128,7 @@ Output:
           .trim();
 
         parsedFilter = JSON.parse(jsonString);
+        console.log(`⏱️ [FetchWorkOrder Tool] Filter parsing completed in ${Date.now() - parseStartTime}ms`);
       } catch (err) {
         return `❌ Failed to parse generated MongoDB filter: ${filterMessage.content}`;
       }
@@ -130,13 +137,17 @@ Output:
       const { filter = {}, projection = {} } = parsedFilter;
 
       // Step 2: Run query
+      console.log(`⏱️ [FetchWorkOrder Tool] Executing MongoDB query...`);
+      const queryStartTime = Date.now();
       const workOrders = await WorkOrder.find(filter, projection)
         .limit(30)
         .lean();
+      console.log(`⏱️ [FetchWorkOrder Tool] Query executed in ${Date.now() - queryStartTime}ms, found ${workOrders.length} records`);
 
       if (!workOrders.length)
         return "No work order found for the given criteria.";
 
+      console.log(`⏱️ [FetchWorkOrder Tool] Total time: ${Date.now() - toolStartTime}ms\n`);
       return `Found ${workOrders.length} work order(s): ${JSON.stringify(workOrders,null,2)}`;
       
     } catch (error) {

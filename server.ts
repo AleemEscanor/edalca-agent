@@ -34,11 +34,22 @@ const memoryClient = new BedrockAgentCoreClient({
 // Handle invocation requests from the Bedrock AgentCore Runtime
 app.post("/invocations", async (req: Request, res: Response) => {
   const startTime = Date.now();
+  const stepTimings: { step: string; timestamp: number; elapsed?: number }[] = [];
+  
+  const logStep = (stepName: string) => {
+    const now = Date.now();
+    const elapsed = stepTimings.length > 0 ? now - stepTimings[stepTimings.length - 1].timestamp : 0;
+    stepTimings.push({ step: stepName, timestamp: now, elapsed });
+    console.log(`⏱️ [${stepName}] - Elapsed from previous step: ${elapsed}ms | Total elapsed: ${now - startTime}ms`);
+  };
+  
   try {
-    await initializeMongoConnection();
+    logStep("[1/6] Server: Request received");
+    // await initializeMongoConnection();
+    // logStep("[2/6] Server: MongoDB connection initialized");
     console.log("-Request Body", req.body);
 
-    const { prompt: userQuery, chatId, sessionId, userId, organizationId } = req.body;
+    const { prompt: userQuery, chatId, memoryId, sessionId, userId, organizationId } = req.body;
 
     if (!userQuery || typeof userQuery !== "string") {
       return res
@@ -46,16 +57,19 @@ app.post("/invocations", async (req: Request, res: Response) => {
         .json({ error: "Missing or invalid 'prompt' in request payload." });
     }
 
+    logStep("[3/6] Server: Request validated");
     // ----- SESSION INTEGRATION -----
-    const session = await GenerateTitleForSession(client, chatId, sessionId, userQuery);
+    // const session = await GenerateTitleForSession(client, chatId, sessionId, userQuery);
+    // logStep("[4/6] Server: Session generated");
 
-    const chatDoc = await Chat.findById(chatId);
-    if (!chatDoc) {
-      return res.status(404).json({ error: "Chat not found." });
-    }
-    const memoryId = chatDoc.memoryId;
+    // const chatDoc = await Chat.findById(chatId);
+    // if (!chatDoc) {
+    //   return res.status(404).json({ error: "Chat not found." });
+    // }
+    // const memoryId = chatDoc.memoryId;
 
-    console.log(`- Using sessionId: ${session._id}, memoryId: ${memoryId}`);
+    // console.log(`- Using sessionId: ${session._id}, memoryId: ${memoryId}`);
+    logStep("[5/6] Server: Calling agent");
 
     const agentResponse = await callAgent(userQuery, `thread-${Date.now()}`, {
       memoryClient,
@@ -65,8 +79,14 @@ app.post("/invocations", async (req: Request, res: Response) => {
       organizationId,
     });
 
+    logStep("[6/6] Server: Agent response received");
     const responseTime = Date.now() - startTime;
-    console.log(`✅ Agent responded successfully in ${responseTime}ms`);
+    console.log(`\n✅ Agent responded successfully in ${responseTime}ms`);
+    console.log("\n📊 Step-by-step timing:");
+    stepTimings.forEach((t, idx) => {
+      console.log(`  ${t.step}: +${t.elapsed}ms (Total: ${t.timestamp - startTime}ms)`);
+    });
+    console.log(`\n🏁 Total time: ${responseTime}ms\n`);
 
     res.status(200).json({
       output: {
@@ -74,7 +94,7 @@ app.post("/invocations", async (req: Request, res: Response) => {
         sources: agentResponse?.sources,
         metadata: {
           responseTime,
-          sessionId: session.sessionId,
+          sessionId: sessionId,
           timestamp: new Date().toISOString(),
         },
       },

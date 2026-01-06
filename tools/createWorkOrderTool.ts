@@ -49,7 +49,9 @@ function parseHumanMessages(messages: any[]) {
 
 export const createWorkOrderTool = tool(
   async (input: any, config: any) => {
-      console.log("Tool called- Create work order");
+      const toolStartTime = Date.now();
+      console.log("\n🔧 [CreateWorkOrder Tool] Started");
+      console.log(`⏱️ [CreateWorkOrder Tool] Called with input:`, input);
 
     const { userId, organizationId } = config?.configurable.user || {};
     let draftFields: Record<string, any> = {};
@@ -91,10 +93,13 @@ export const createWorkOrderTool = tool(
     // 3️⃣ Validate procedure
     if (draftFields.procedure && !draftFields.procedureId) {
       // Procedure validation (case-insensitive)
+      console.log(`⏱️ [CreateWorkOrder Tool] Validating procedure...`);
+      const procStartTime = Date.now();
       const proc = await Procedure.findOne({
         name: { $regex: `^${draftFields.procedure}$`, $options: "i" },
         organizationId,
       });
+      console.log(`⏱️ [CreateWorkOrder Tool] Procedure validation completed in ${Date.now() - procStartTime}ms`);
       if (!proc) {
         return new ToolMessage({
           content: JSON.stringify({
@@ -113,10 +118,13 @@ export const createWorkOrderTool = tool(
     // 4️⃣ Validate location
     if (draftFields.location && !draftFields.locationId) {
       // Location validation (case-insensitive)
+      console.log(`⏱️ [CreateWorkOrder Tool] Validating location...`);
+      const locStartTime = Date.now();
       const loc: any = await Location.findOne({
         name: { $regex: `^${draftFields.location}$`, $options: "i" },
         organizationId,
       });
+      console.log(`⏱️ [CreateWorkOrder Tool] Location validation completed in ${Date.now() - locStartTime}ms`);
       if (!loc) {
         return new ToolMessage({
           content: JSON.stringify({
@@ -136,6 +144,8 @@ export const createWorkOrderTool = tool(
     // 5️⃣ Validate assigned users
     // Assigned users validation (case-insensitive, supports first-name-only)
     if (draftFields.assignToUser && !draftFields.assignedTo) {
+      console.log(`⏱️ [CreateWorkOrder Tool] Validating assigned users...`);
+      const userStartTime = Date.now();
       const names = Array.isArray(draftFields.assignToUser)
         ? draftFields.assignToUser
         : draftFields.assignToUser.split(",").map((n: string) => n.trim());
@@ -182,6 +192,7 @@ export const createWorkOrderTool = tool(
         name: `${u.firstName} ${u.lastName}.trim()`,
         type: "user",
       }));
+      console.log(`⏱️ [CreateWorkOrder Tool] User validation completed in ${Date.now() - userStartTime}ms`);
     }
 
     // 6️⃣ Check for missing fields
@@ -199,6 +210,8 @@ export const createWorkOrderTool = tool(
     }
 
     // 7️⃣ All fields present → create work order
+    console.log(`⏱️ [CreateWorkOrder Tool] All fields validated, creating work order...`);
+    const createStartTime = Date.now();
     const f = draftFields;
 
     const newWorkOrder = await WorkOrder.create({
@@ -216,6 +229,8 @@ export const createWorkOrderTool = tool(
       clientSupervisorId: f.clientSupervisorId,
       companySupervisorId: f.companySupervisorId,
     });
+    console.log(`⏱️ [CreateWorkOrder Tool] Work order created in ${Date.now() - createStartTime}ms`);
+    console.log(`⏱️ [CreateWorkOrder Tool] Total time: ${Date.now() - toolStartTime}ms\n`);
 
     return new ToolMessage({
       content: JSON.stringify({

@@ -16,8 +16,9 @@ const runtimeClient = new BedrockAgentRuntimeClient({
 export const queryKnowledgeBaseTool = tool(
   async (input: any) => {
     try {
-      console.log("Tool called - Query Documents Knowledge Base");
-      console.log("Input query:", input.query);
+      const toolStartTime = Date.now();
+      console.log("\n🔧 [QueryKnowledgeBase Tool] Started");
+      console.log(`⏱️ [QueryKnowledgeBase Tool] Called with query:`, input.query);
 
       const kbId = process.env.KB_ID;
 
@@ -26,6 +27,8 @@ export const queryKnowledgeBaseTool = tool(
       }
 
       // Call the Knowledge Base retrieve API
+      console.log(`⏱️ [QueryKnowledgeBase Tool] Retrieving from knowledge base...`);
+      const retrieveStartTime = Date.now();
       const response = await runtimeClient.send(
         new RetrieveCommand({
           knowledgeBaseId: kbId,
@@ -35,6 +38,7 @@ export const queryKnowledgeBaseTool = tool(
           },
         })
       );
+      console.log(`⏱️ [QueryKnowledgeBase Tool] KB retrieval completed in ${Date.now() - retrieveStartTime}ms`);
 
       const results = response.retrievalResults || [];
 
@@ -51,6 +55,7 @@ export const queryKnowledgeBaseTool = tool(
       // Extract S3 source locations for transparency
       const sources = results.map((r) => r.location?.s3Location).filter(Boolean);
 
+      console.log(`⏱️ [QueryKnowledgeBase Tool] Total time: ${Date.now() - toolStartTime}ms\n`);
       return JSON.stringify(
         {
           answer: chunks,

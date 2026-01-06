@@ -124,6 +124,9 @@ const chatModel = new ChatOpenAI({
 // Model Function
 // ---------------------------
 async function callModel(state: typeof GraphState.State) {
+  const modelStartTime = Date.now();
+  console.log(`\n🧠 [Model] Invoking LLM with ${state.messages.length} messages...`);
+  
   const prompt = ChatPromptTemplate.fromMessages([
     [
       "system",
@@ -150,6 +153,7 @@ async function callModel(state: typeof GraphState.State) {
   });
 
   const result = await chatModel.invoke(formattedPrompt);
+  console.log(`⏱️ [Model] LLM response received in ${Date.now() - modelStartTime}ms`);
   return { messages: [result] };
 }
 
@@ -182,21 +186,38 @@ export async function callAgent(
     organizationId: string;
   }
 ) {
+  const agentStartTime = Date.now();
+  console.log(`\n⏱️ [Agent] Process started`);
+  
   // 1️⃣ Fetch past messages from this session
-  const pastMessages = await fetchConversationHistory(
-    memoryClient,
-    memoryId,
-    session_id,
-    actor_id
-  );
+  const historyStartTime = Date.now();
+console.log(`⏱️ [Agent] Fetching conversation history and summary...`);
 
-  const pastSummaries = await fetchConversationSummary(
-    userQuery,
-    memoryClient,
-    memoryId,
-    session_id,
-    actor_id
-  );
+// Start both fetches in parallel
+const pastMessagesPromise = fetchConversationHistory(
+  memoryClient,
+  memoryId,
+  session_id,
+  actor_id
+);
+
+const summaryStartTime = Date.now();
+const pastSummariesPromise = fetchConversationSummary(
+  userQuery,
+  memoryClient,
+  memoryId,
+  session_id,
+  actor_id
+);
+
+// Wait for both to complete
+const [pastMessages, pastSummaries] = await Promise.all([
+  pastMessagesPromise,
+  pastSummariesPromise
+]);
+
+console.log(`⏱️ [Agent] Conversation history fetched in ${Date.now() - historyStartTime}ms`);
+console.log(`⏱️ [Agent] Conversation summary fetched in ${Date.now() - summaryStartTime}ms`);
 
   const initialMessage = new HumanMessage(userQuery);
 
@@ -213,6 +234,8 @@ export async function callAgent(
   const cleanedMessages = cleanPastMessagesAfterReset(pastMessages);
   const initialState = { messages: [...cleanedMessages, initialMessage], summaries: pastSummaries };
 
+  console.log(`⏱️ [Agent] Starting workflow execution...`);
+  const workflowStartTime = Date.now();
   const finalState = await app.invoke(initialState, {
     recursionLimit: 15,
     configurable: {
@@ -221,11 +244,14 @@ export async function callAgent(
       state: initialState,
     },
   });
+  console.log(`⏱️ [Agent] Workflow completed in ${Date.now() - workflowStartTime}ms`);
 
   const allMessages = finalState.messages;
   const latestTwo = allMessages.slice(-2);
 
   // 2️⃣ Insert events into Bedrock memory for this session
+  console.log(`⏱️ [Agent] Preparing messages for memory storage...`);
+  const memoryPrepStartTime = Date.now();
   const payload: PayloadType[] = latestTwo.map((msg: any) => {
     let role: "USER" | "ASSISTANT" | "TOOL" | "OTHER" = "OTHER";
     
@@ -241,20 +267,34 @@ export async function callAgent(
 
     return { conversational: { content: { text: textContent }, role } } as unknown as PayloadType;
   });
+  console.log(`⏱️ [Agent] Messages prepared in ${Date.now() - memoryPrepStartTime}ms`);
 
-  const command: any = new CreateEventCommand({
-    memoryId: memoryId,
-    actorId: actor_id,
-    sessionId: session_id,
-    eventTimestamp: new Date(),
-    payload,
-    clientToken: crypto.randomUUID(),
-  });
+  console.log(`⏱️ [Agent] Saving to Bedrock memory...`);
+  const memorySaveStartTime = Date.now();
+  // Kick off memory save without awaiting
+(async () => {
+  try {
+    const command = new CreateEventCommand({
+      memoryId,
+      actorId: actor_id,
+      sessionId: session_id,
+      eventTimestamp: new Date(),
+      payload,
+      clientToken: crypto.randomUUID(),
+    });
 
-  const res = await memoryClient.send(command);
+    await memoryClient.send(command);
+    console.log(`⏱️ [Agent] Memory saved in ${Date.now() - memorySaveStartTime}ms`);
+    console.log("✅ Memory saved");
+  } catch (err) {
+    console.error("❌ Memory save failed", err);
+  }
+})();
 
   const finalMessageContent = allMessages[allMessages.length - 1].content;
   const sources = extractSourcesFromMessages(allMessages);
+
+  console.log(`⏱️ [Agent] Total process time: ${Date.now() - agentStartTime}ms\n`);
 
   return sources ? { message: finalMessageContent, sources } : { message: finalMessageContent };
 }
