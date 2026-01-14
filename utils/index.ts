@@ -45,7 +45,7 @@ export async function getOrCreateMemory(client: any, chatId: string) {
 
 import { BaseMessage } from "@langchain/core/messages";
 import ChatSession from "../model/chat/ChatSessionModel";
-import { ChatOpenAI } from "@langchain/openai";
+// import { ChatOpenAI } from "@langchain/openai";
 
 /**
  * Cleans up past conversation messages by removing any messages
@@ -121,47 +121,47 @@ export function extractSourcesFromMessages(messages: any): string[] | null {
   return urls.size ? [...urls] : null;
 }
 
-export async function GenerateTitleForSession(
-  client: BedrockAgentCoreControlClient,
-  chatId: string,
-  sessionId: string,
-  userQuery: string
-) {
-  let session = await ChatSession.findOne({
-    chatId: chatId,
-    _id: sessionId,
-    isActive: true,
-  });
-  const model = new ChatOpenAI({
-    model: "gpt-4o-mini-2024-07-18",
-    temperature: 0.2,
-  });
-  if (!session?.title) {
-    // generate a short title using the users first message for the session
-    if (!session?.title) {
-      const titlePrompt = `
-Generate a short, clear title 2-3 words (max 7 words) that summarizes this user request.
-Rules:
-- No quotes
-- No punctuation
-- Title Case
-- Be concise
+// export async function GenerateTitleForSession(
+//   client: BedrockAgentCoreControlClient,
+//   chatId: string,
+//   sessionId: string,
+//   userQuery: string
+// ) {
+//   let session = await ChatSession.findOne({
+//     chatId: chatId,
+//     _id: sessionId,
+//     isActive: true,
+//   });
+//   const model = new ChatOpenAI({
+//     model: "gpt-4o-mini-2024-07-18",
+//     temperature: 0.2,
+//   });
+//   if (!session?.title) {
+//     // generate a short title using the users first message for the session
+//     if (!session?.title) {
+//       const titlePrompt = `
+// Generate a short, clear title 2-3 words (max 7 words) that summarizes this user request.
+// Rules:
+// - No quotes
+// - No punctuation
+// - Title Case
+// - Be concise
 
-User message:
-"${userQuery}"
-`;
+// User message:
+// "${userQuery}"
+// `;
 
-      const titleResponse = await model.invoke(titlePrompt);
+//       const titleResponse = await model.invoke(titlePrompt);
 
-      const title =
-        typeof titleResponse.content === "string"
-          ? titleResponse.content.trim()
-          : "New Chat";
+//       const title =
+//         typeof titleResponse.content === "string"
+//           ? titleResponse.content.trim()
+//           : "New Chat";
 
-      session.title = title;
-      await session.save();
-    }
-  }
+//       session.title = title;
+//       await session.save();
+//     }
+//   }
 
-  return session;
-}
+//   return session;
+// }

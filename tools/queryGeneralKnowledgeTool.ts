@@ -4,7 +4,6 @@ import {
   BedrockAgentRuntimeClient,
   RetrieveCommand,
 } from "@aws-sdk/client-bedrock-agent-runtime";
-import { RunnableConfig } from "@langchain/core/runnables";
 
 // Create Bedrock runtime client
 const runtimeClient = new BedrockAgentRuntimeClient({
@@ -14,35 +13,32 @@ const runtimeClient = new BedrockAgentRuntimeClient({
 // ─────────────────────────────────────────────
 // Knowledge Base Retrieval Tool
 // ─────────────────────────────────────────────
-export const queryKnowledgeBaseTool = tool(
-  async ({query}, config?: RunnableConfig) => {
+export const queryGeneralKnowledgeTool = tool(
+  async (input: any) => {
     try {
-      // 💡 Extract the onToken from the metadata we will pass in
-    const onToken = config?.metadata?.onToken;
+      const toolStartTime = Date.now();
+      console.log("\n🔧 [QueryGeneralKnowledge Tool] Started");
+      console.log(`⏱️ [QueryGeneralKnowledge Tool] Called with query:`, input.query);
 
-    if (typeof onToken === "function") {
-      onToken(`📖 *Searching Knowledge Base for: "${query}"...*\n\n`);
-    }
-    
-      console.log("Tool called - Query Documents Knowledge Base");
-      console.log("Input query:", query);
-
-      const kbId = process.env.KB_ID;
+      const kbId = process.env.GENERAL_KB_ID;
 
       if (!kbId) {
         return "❌ KB_ID is missing. Please set KB_ID in environment variables.";
       }
 
       // Call the Knowledge Base retrieve API
+      console.log(`⏱️ [QueryGeneralKnowledge Tool] Retrieving from knowledge base...`);
+      const retrieveStartTime = Date.now();
       const response = await runtimeClient.send(
         new RetrieveCommand({
           knowledgeBaseId: kbId,
-          retrievalQuery: { text: query },
+          retrievalQuery: { text: input.query },
           retrievalConfiguration: {
             vectorSearchConfiguration: { numberOfResults: 5 },
           },
         })
       );
+      console.log(`⏱️ [QueryGeneralKnowledge Tool] KB retrieval completed in ${Date.now() - retrieveStartTime}ms`);
 
       const results = response.retrievalResults || [];
 
@@ -59,6 +55,7 @@ export const queryKnowledgeBaseTool = tool(
       // Extract S3 source locations for transparency
       const sources = results.map((r) => r.location?.s3Location).filter(Boolean);
 
+      console.log(`⏱️ [QueryKnowledgeBase Tool] Total time: ${Date.now() - toolStartTime}ms\n`);
       return JSON.stringify(
         {
           answer: chunks,
@@ -69,14 +66,15 @@ export const queryKnowledgeBaseTool = tool(
       );
     } catch (error: any) {
       console.error("Knowledge base query failed:", error);
-      return `❌ Failed to query knowledge base: ${error.message}`;
+      return `❌ Failed to query general knowledge base: ${error.message}`;
     }
   },
   {
-    name: "query_documents_kb",
-    description: "MUST use this tool to search internal technical manuals and company documents. You MUST provide a specific search 'query' string based on the user's request.",
+    name: "query_general_knowledge_documents_kb",
+    description:
+      "Queries the Amazon Bedrock Knowledge Base for general knowledge documents information based on the user's question.",
     schema: z.object({
-      query: z.string().min(1).describe("The user's natural language question."),
+      query: z.string().describe("The user's natural language question."),
     }),
   }
 );

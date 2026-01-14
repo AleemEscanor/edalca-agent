@@ -1,12 +1,12 @@
 import express, { Request, Response } from "express";
 import { callAgent } from "./index";
 import dotenv from "dotenv";
-import initializeMongoConnection from "./local_runner";
 import cors from "cors";
 import { BedrockAgentCoreControlClient } from "@aws-sdk/client-bedrock-agentcore-control";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
-import { GenerateTitleForSession } from "./utils";
+// import { GenerateTitleForSession } from "./utils";
 import Chat from "./model/chat/ChatModel";
+import { runWorkOrderAgent } from "./testFile";
 
 dotenv.config();
 const app = express();
@@ -31,9 +31,11 @@ const memoryClient = new BedrockAgentCoreClient({
   },
 });
 
-// Handle invocation requests from the Bedrock AgentCore Runtime
+// Handle invocation requests from the Bedrock AgentCore Runtime with streaming
 app.post("/invocations", async (req: Request, res: Response) => {
   const startTime = Date.now();
+  console.log('Agent Invoked ', startTime);
+  
   const stepTimings: { step: string; timestamp: number; elapsed?: number }[] = [];
   
   const logStep = (stepName: string) => {
@@ -71,15 +73,49 @@ app.post("/invocations", async (req: Request, res: Response) => {
     // console.log(`- Using sessionId: ${session._id}, memoryId: ${memoryId}`);
     logStep("[5/6] Server: Calling agent");
 
-    const agentResponse = await callAgent(userQuery, `thread-${Date.now()}`, {
+    // Set up SSE (Server-Sent Events) for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Add this to your /invocations headers
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    // Token buffer to collect streaming tokens
+    let accumulatedTokens = "";
+    let sources: any = null;
+
+    const onToken = (token: string) => {
+      accumulatedTokens += token;
+      // Send each token as an SSE event
+      res.write(`data: ${JSON.stringify({
+        type: 'token',
+        content: token,
+        timestamp: new Date().toISOString(),
+      })}\n\n`);
+    };
+
+    // const agentResponse = await callAgent(userQuery, `thread-${Date.now()}`, {
+    //   memoryClient,
+    //   memoryId,
+    //   actor_id: userId,
+    //   session_id: sessionId,
+    //   organizationId,
+    //   onToken,
+    // });
+
+    const agentResponse = await runWorkOrderAgent(userQuery, `thread-${Date.now()}`, {
       memoryClient,
       memoryId,
       actor_id: userId,
       session_id: sessionId,
       organizationId,
+      onToken,
     });
 
     logStep("[6/6] Server: Agent response received");
+    // sources = agentResponse?.sources;
+    
     const responseTime = Date.now() - startTime;
     console.log(`\n✅ Agent responded successfully in ${responseTime}ms`);
     console.log("\n📊 Step-by-step timing:");
@@ -87,25 +123,39 @@ app.post("/invocations", async (req: Request, res: Response) => {
       console.log(`  ${t.step}: +${t.elapsed}ms (Total: ${t.timestamp - startTime}ms)`);
     });
     console.log(`\n🏁 Total time: ${responseTime}ms\n`);
-
-    res.status(200).json({
-      output: {
-        message: agentResponse.message,
-        sources: agentResponse?.sources,
-        metadata: {
-          responseTime,
-          sessionId: sessionId,
-          timestamp: new Date().toISOString(),
-        },
+    console.log('Response completed at ', Date.now());
+    
+    // Send final metadata and completion event
+    res.write(`data: ${JSON.stringify({
+      type: 'metadata',
+      sources: sources,
+      metadata: {
+        responseTime,
+        sessionId: sessionId,
+        timestamp: new Date().toISOString(),
       },
-    });
+    })}\n\n`);
+
+    // Send completion signal
+    res.write(`data: ${JSON.stringify({
+      type: 'done',
+      timestamp: new Date().toISOString(),
+    })}\n\n`);
+
+    res.end();
   } catch (error: any) {
     const responseTime = Date.now() - startTime;
     console.error(`❌ Agent invocation failed after ${responseTime}ms`, error);
-    res.status(500).json({
+    
+    // Send error via SSE
+    res.write(`data: ${JSON.stringify({
+      type: 'error',
       error: "Agent processing failed.",
       details: error?.message,
-    });
+      timestamp: new Date().toISOString(),
+    })}\n\n`);
+    
+    res.end();
   }
 });
 

@@ -7,16 +7,12 @@ dotenv.config();
 // // This file simulates how the AWS AgentCore runtime would invoke your agent.
 // // You can run it with npm start after setting up your environment variables.
 
-const initializeMongoConnection = async () => {
-  try {
-    await mongoose.connect(`${process.env.MONGO_URI}`);
-    console.log(" MongoDB connected successfully.");
-  } catch (error: any) {
-    console.log("connection error", error);
-  }
-};
-
-export default initializeMongoConnection;
+let cachedDb: any = null;
+export async function initializeMongoConnection() {
+  if (cachedDb) return cachedDb; // Return existing connection
+  cachedDb = await mongoose.connect(`${process.env.MONGO_URI}`);
+  return cachedDb;
+}
 
 // async function main() {
 //    await initializeMongoConnection();
