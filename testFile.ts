@@ -24,6 +24,7 @@ import { fetchWorkOrderTool } from "./tools/fetchWorkOrderTool";
 import { queryKnowledgeBaseTool } from "./tools/queryKnowledgeBaseTool";
 import * as crypto from "crypto";
 import { SYSTEM_INSTRUCTION } from "./constants/prompts";
+import { webSearchGroundingTool } from "./tools/webSearchTool";
 
 // --- Graph Setup ---
 const StateAnnotation = Annotation.Root({
@@ -32,10 +33,10 @@ const StateAnnotation = Annotation.Root({
 });
 
 // --- 1. MOVE TO TOP LEVEL (SINGLETONS) ---
-const tools = [fetchWorkOrderTool, queryKnowledgeBaseTool];
+const tools = [fetchWorkOrderTool, queryKnowledgeBaseTool, webSearchGroundingTool];
 const toolNode = new ToolNode(tools);
 const model = new ChatGoogleGenerativeAI({
-  model: "gemini-3-flash-preview", // Recommending 1.5-flash for speed
+  model: "gemini-flash-latest", // Recommending 1.5-flash for speed
   apiKey: process.env.GEMINI_API_KEY,
   streaming: true,
   temperature: 0,
@@ -88,7 +89,7 @@ export async function runWorkOrderAgent(
         memoryId,
         actorId: actor_id,
         sessionId: session_id,
-        maxResults: 15,
+        maxResults: 10,
       })
     ),
     memoryClient.send(

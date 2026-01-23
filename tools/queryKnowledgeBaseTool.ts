@@ -15,15 +15,15 @@ const runtimeClient = new BedrockAgentRuntimeClient({
 // Knowledge Base Retrieval Tool
 // ─────────────────────────────────────────────
 export const queryKnowledgeBaseTool = tool(
-  async ({query}, config?: RunnableConfig) => {
+  async ({ query }, config?: RunnableConfig) => {
     try {
       // 💡 Extract the onToken from the metadata we will pass in
-    const onToken = config?.metadata?.onToken;
+      const onToken = config?.metadata?.onToken;
 
-    if (typeof onToken === "function") {
-      onToken(`📖 *Searching Knowledge Base for: "${query}"...*\n\n`);
-    }
-    
+      if (typeof onToken === "function") {
+        onToken(`📖 *Searching Knowledge Base for: "${query}"...*\n\n`);
+      }
+
       console.log("Tool called - Query Documents Knowledge Base");
       console.log("Input query:", query);
 
@@ -48,25 +48,28 @@ export const queryKnowledgeBaseTool = tool(
 
       if (!results.length) {
         return "No relevant information found in the knowledge base.";
-      }
+      }      
 
-      // Extract only text chunks
-      const chunks = results
-        .map((r) => r.content?.text)
-        .filter(Boolean)
+      // Format the results into paired strings
+      const formattedResults = results
+        .reduce((acc: Record<string, string[]>, r) => {
+          const text = r.content?.text || "No content";
+          const source = r.location?.s3Location?.uri || "Unknown Source";
+          if (!acc[source]) {
+        acc[source] = [];
+          }
+          acc[source].push(text);
+          return acc;
+        }, {})
+        const resultsBySource = Object.entries(formattedResults)
+        .map(([source, texts], index) => 
+          `Document Chunk [${index + 1}]:\nContent: ${texts.join("\n")}\nSource URL: ${source}`
+        )
         .join("\n\n---\n\n");
 
-      // Extract S3 source locations for transparency
-      const sources = results.map((r) => r.location?.s3Location).filter(Boolean);
+      console.log('resultsBySource', resultsBySource);
 
-      return JSON.stringify(
-        {
-          answer: chunks,
-          sources,
-        },
-        null,
-        2
-      );
+      return resultsBySource;
     } catch (error: any) {
       console.error("Knowledge base query failed:", error);
       return `❌ Failed to query knowledge base: ${error.message}`;
@@ -74,9 +77,13 @@ export const queryKnowledgeBaseTool = tool(
   },
   {
     name: "query_documents_kb",
-    description: "MUST use this tool to search internal technical manuals and company documents. You MUST provide a specific search 'query' string based on the user's request.",
+    description:
+      "MUST use this tool to search internal technical manuals and company documents. You MUST provide a specific search 'query' string based on the user's request.",
     schema: z.object({
-      query: z.string().min(1).describe("The user's natural language question."),
+      query: z
+        .string()
+        .min(1)
+        .describe("The user's natural language question."),
     }),
   }
 );
