@@ -45,6 +45,8 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/edalca-agent:${{ steps.vars.outputs.tag }}
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/edalca-agent:${{ github.sha }}
