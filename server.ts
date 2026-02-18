@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { BedrockAgentCoreControlClient } from "@aws-sdk/client-bedrock-agentcore-control";
 import { BedrockAgentCoreClient } from "@aws-sdk/client-bedrock-agentcore";
-// import { GenerateTitleForSession } from "./utils";
 import { runWorkOrderAgent } from "./testFile";
 
 dotenv.config();
