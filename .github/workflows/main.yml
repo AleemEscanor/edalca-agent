@@ -9,6 +9,9 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # This line tells GitHub which set of environment secrets to use
+    environment: ${{ github.ref_name }}
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -63,4 +66,13 @@ jobs:
             --lifecycle-configuration '{
                 "idleRuntimeSessionTimeout": 28800, 
                 "maxLifetime": 28800
+            }' \
+            --environment-variables '{
+                "AWS_ACCESS_KEY_ID": "${{ secrets.AWS_ACCESS_KEY_ID }}",
+                "AWS_REGION":  "${{ secrets.AWS_REGION }}",
+                "AWS_SECRET_ACCESS_KEY": "${{ secrets.AWS_SECRET_ACCESS_KEY }}",
+                "GEMINI_API_KEY": "${{ secrets.GEMINI_API_KEY }}",
+                "GENERAL_KB_ID": "${{ secrets.GENERAL_KB_ID }}",
+                "KB_ID": "${{ secrets.KB_ID }}",
+                "MONGO_URI": "${{ secrets.MONGO_URI }}"
             }'
