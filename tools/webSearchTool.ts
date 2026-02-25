@@ -8,7 +8,7 @@ export const webSearchGroundingTool = tool(async ({ query }) => {
   
   // Call Gemini Natively with Grounding
   const response = await client.models.generateContent({
-    model: "gemini-flash-latest", // Use a stable model here
+    model: "gemini-2.5-flash", // Use a stable model here
     contents: [{ role: "user", parts: [{ text: query }] }],
     config: {
       tools: [{ googleSearch: {} }] 
