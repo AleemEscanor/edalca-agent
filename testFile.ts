@@ -72,15 +72,41 @@ const callModel = async (
   let finalToolCalls: any[] | undefined;
 
   for await (const chunk of stream) {
-    const content = chunk.content as string;
+    const rawContent = (chunk as any).content;
+    console.log('rawContent- ', rawContent);
+    
+    let textDelta = "";
 
-    if (content) {
-      finalContent += content;
+    // Extract ONLY human-readable text, ignore function/tool call payloads
+    if (typeof rawContent === "string") {
+      textDelta = rawContent;
+    } else if (Array.isArray(rawContent)) {
+      for (const part of rawContent as any[]) {
+        if (typeof part === "string") {
+          textDelta += part;
+        } else if (part && typeof part === "object") {
+          // Common Gemini shapes: { type: "text", text: "..." } or similar
+          if (
+            typeof part.text === "string" &&
+            // Explicitly skip functionCall/tool call chunks
+            !part.functionCall &&
+            part.type !== "functionCall" &&
+            part.type !== "tool" &&
+            part.type !== "toolCall"
+          ) {
+            textDelta += part.text;
+          }
+        }
+      }
+    }
 
-      // 🔥 TRUE TOKEN STREAMING
+    if (textDelta) {
+      finalContent += textDelta;
+
+      // 🔥 TRUE TOKEN STREAMING (text only)
       const onToken = config?.configurable?.onToken;
-      if (onToken) {        
-        onToken(content);
+      if (onToken) {
+        onToken(textDelta);
       }
     }
 

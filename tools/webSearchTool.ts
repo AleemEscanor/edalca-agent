@@ -20,14 +20,27 @@ export const webSearchGroundingTool = tool(async ({ query }) => {
   const candidate = response.candidates?.[0];
   if (!candidate) return "Found Nothing on Web Search";
   
-  const text = candidate.content?.parts?.[0]?.text ?? "";
-  const metadata = candidate.groundingMetadata;
+  const text = candidate.content?.parts
+  ?.map(p => p.text ?? "")
+  .join("") ?? "";
+  
+  const metadata = candidate.groundingMetadata;  
 
   // IMPORTANT: You must manually format the links so the outer agent sees them
+  const seen = new Set();
   let sourcesList = "\n\nWeb Sources:\n";
-  metadata?.groundingChunks?.forEach((chunk, i) => {
-    sourcesList += `[Web ${i+1}] ${chunk?.web?.title}: ${chunk?.web?.uri}\n`;
+  
+  metadata?.groundingChunks?.forEach((chunk) => {
+    const uri = chunk?.web?.uri;
+    const title = chunk?.web?.title;
+  
+    if (uri && !seen.has(uri)) {
+      seen.add(uri);
+      sourcesList += `- ${title}: ${uri}\n`;
+    }
   });
+
+  console.log(`RESEARCH REPORT:\n${text}\n${sourcesList}`)
 
   return `RESEARCH REPORT:\n${text}\n${sourcesList}`;
 }, {
